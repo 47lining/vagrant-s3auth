@@ -16,23 +16,18 @@ $ vagrant plugin install vagrant-s3auth
 
 ## Usage
 
-vagrant-s3auth will automatically convert S3 box URLs
+vagrant-s3auth will automatically sign requests for S3 URLs
 
 ```
 s3://bucket.example.com/path/to/metadata
 ```
 
-to URLs [signed with your AWS access key][aws-signed]:
-
-```
-https://s3.amazonaws.com/bucket.example.com/path/to/metadata?AWSAccessKeyId=
-    AKIAIOSFODNN7EXAMPLE&Expires=1141889120&Signature=vjbyPxybdZaNmGa%2ByT272YEAiv4%3D
-```
+with your AWS access key.
 
 This means you can host your team's sensitive, private boxes on S3, and use your
 developers' existing AWS credentials to securely grant access.
 
-If you've already got your credentials stored in the appropriate environment
+If you've already got your credentials stored in the standard environment
 variables:
 
 ```ruby
@@ -60,10 +55,52 @@ ENV['AWS_ACCESS_KEY_ID']     = creds[0]
 ENV['AWS_SECRET_ACCESS_KEY'] = creds[1]
 ```
 
+#### S3 URLs
+
+Note that your URL must use the path style of specifying the bucket:
+
+```
+http://s3.amazonaws.com/bucket/resource
+https://s3.amazonaws.com/bucket/resource
+```
+
+Or the S3 protocol shorthand
+
+```
+s3://bucket/resource
+```
+
+which expands to the path-style HTTPS URL.
+
+Virtual host-style S3 URLs, where the bucket is specified in the hostname are
+**not detected**!
+
+```
+https://bucket.s3-region.amazonaws.com/resource # ignored
+```
+
+##### Non-standard regions
+
+If your bucket is not hosted in the US Standard region, you'll need to specify
+the correct region endpoint as part of the URL:
+
+```
+https://s3-us-west-2.amazonaws.com/bucket/resource
+```
+
+Or just use the S3 protocol shorthand, which will automatically determine the
+correct region at the cost of an extra DNS lookup:
+
+```
+s3://bucket/resource
+```
+
+For additional details on specifying S3 URLs, refer to the [S3 Developer Guide:
+Virtual hosting of buckets][bucket-vhost].
 
 #### Simple boxes
 
-Simply point your `box_url` at Amazon S3:
+Simply point your `box_url` at a [supported S3 URL](#s3-url):
 
 ```ruby
 Vagrant.configure('2') do |config|
@@ -72,43 +109,23 @@ Vagrant.configure('2') do |config|
 end
 ```
 
-Note that your URL must be of the form
-
-```
-https://s3.amazonaws.com/bucket/resource
-```
-
-Other valid forms of S3 URLs (`bucket.s3.amazonaws.com/resource.box`, etc.) will
-not be detected by vagrant-s3auth.
-
-As shorthand, `s3://` URLs will be automatically transformed. This is equivalent
-to the above:
-
-```ruby
-Vagrant.configure('2') do |config|
-  config.vm.box     = 'simple-secrets'
-  config.vm.box_url = 's3://example.com/secret.box'
-end
-```
-
-**Note:** Simple box URLs must end in `.box`, or they'll be interpreted as
-[metadata boxes](#metadata-boxes).
-
 #### Vagrant Cloud
 
 Boxes on [Vagrant Cloud][vagrant-cloud] have support for versioning, multiple
 providers, and a GUI management tool. If you've got a box version on Vagrant
-Cloud.
+Cloud, just point it at a [supported S3 URL](#s3-urls):
+
+![Adding a S3 box to Vagrant Cloud](https://cloud.githubusercontent.com/assets/882976/3273399/d5d70966-f323-11e3-8393-22195050aeac.png)
 
 Then just configure your Vagrantfile like normal:
 
 ```ruby
 Vagrant.configure('2') do |config|
-  config.vm.box = 'examplecorp/secrets'
+  config.vm.box = 'benesch/test-box'
 end
 ```
 
-#### Metadata boxes
+#### Metadata (versioned) boxes
 
 [Metadata boxes][metadata-boxes] were added to Vagrant in 1.5 and power Vagrant
 Cloud. You can host your own metadata and bypass Vagrant Cloud entirely.
@@ -143,27 +160,12 @@ end
 }
 ```
 
-**Note:** box URLs in metadata JSON must use the
-`s3.amazonaws.com/bucket.example.com/resource.box` URL form, or it won't get
-auto-signed.
+Within your metadata JSON, be sure to use [supported S3 URLs](#s3-urls).
 
-### Rules
+Note that the metadata itself doesn't need to be hosted on S3. Any metadata that
+points to a supported S3 URL will result in an authenticated request.
 
-To sum up:
-
-* Only the `box_url` setting can use the `s3://` shorthand. URLs entered on the
-  Vagrant Cloud management interface and in JSON metadata must use the full
-  HTTPS URL.
-
-* The full HTTPS URL must be of the form
-  `https://s3.amazonaws.com/bucket.example.com/resource.box`, or it won't be
-  signed properly.
-
-* Metadata box files must *not* end in `.box`.
-
-* Actual box files *must* end in `.box`.
-
-### Auto-install
+## Auto-install
 
 The beauty of Vagrant is the magic of "`vagrant up` and done." Making your users
 install a plugin is lame.
@@ -182,7 +184,8 @@ end
 ```
 
 
-[aws-signed]: http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html#RESTAuthenticationQueryStringAuth
+[aws-signed]: http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html#ConstructingTheAuthenticationHeader
+[bucket-vhost]: http://docs.aws.amazon.com/AmazonS3/latest/dev/VirtualHosting.html#VirtualHostingExamples
 [metadata-boxes]: http://docs.vagrantup.com/v2/boxes/format.html
 [vagrant]: http://vagrantup.com
 [vagrant-cloud]: http://vagrantcloud.com
